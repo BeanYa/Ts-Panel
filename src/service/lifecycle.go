@@ -110,22 +110,30 @@ func Delete(ctx context.Context, sqlDB *sql.DB, instanceID string) error {
 }
 
 // GetInstanceByID 按 ID 查询实例
-func GetInstanceByID(sqlDB *sql.DB, instanceID string) (*db.Instance, error) {
+ func GetInstanceByID(sqlDB *sql.DB, instanceID string) (*db.Instance, error) {
 	row := sqlDB.QueryRow(`
-		SELECT id, customer_id, container_name, host_udp_port, host_query_port,
-		       slots, slots_applied, status, created_at, updated_at,
-		       expires_at, last_delivery_text, data_path, error_message, last_action
-		FROM instances WHERE id = ?`, instanceID)
+		SELECT i.id, i.customer_id, i.container_name, i.host_udp_port, i.host_query_port,
+		       i.slots, i.slots_applied, i.status, i.created_at, i.updated_at,
+		       i.expires_at, i.last_delivery_text, i.data_path, i.error_message, i.last_action,
+		       s.login_name, s.admin_password, s.api_key,
+		       s.serverquery_password, s.admin_privilege_key
+		FROM instances i
+		LEFT JOIN secrets s ON s.instance_id = i.id
+		WHERE i.id = ?`, instanceID)
 	return scanInstance(row)
 }
 
 // GetAllInstances 获取所有实例列表
 func GetAllInstances(sqlDB *sql.DB) ([]*db.Instance, error) {
 	rows, err := sqlDB.Query(`
-		SELECT id, customer_id, container_name, host_udp_port, host_query_port,
-		       slots, slots_applied, status, created_at, updated_at,
-		       expires_at, last_delivery_text, data_path, error_message, last_action
-		FROM instances ORDER BY created_at DESC`)
+		SELECT i.id, i.customer_id, i.container_name, i.host_udp_port, i.host_query_port,
+		       i.slots, i.slots_applied, i.status, i.created_at, i.updated_at,
+		       i.expires_at, i.last_delivery_text, i.data_path, i.error_message, i.last_action,
+		       s.login_name, s.admin_password, s.api_key,
+		       s.serverquery_password, s.admin_privilege_key
+		FROM instances i
+		LEFT JOIN secrets s ON s.instance_id = i.id
+		ORDER BY i.created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -137,23 +145,45 @@ func GetAllInstances(sqlDB *sql.DB) ([]*db.Instance, error) {
 		var customerID sql.NullString
 		var errorMessage sql.NullString
 		var slotsApplied int
+		var createdAtStr, updatedAtStr string
+		var loginName, adminPass, apiKey, queryPass, privKey sql.NullString
 
 		if err := rows.Scan(
 			&inst.ID, &customerID, &inst.ContainerName,
 			&inst.HostUDPPort, &inst.HostQueryPort,
 			&inst.Slots, &slotsApplied, &inst.Status,
-			&inst.CreatedAt, &inst.UpdatedAt,
+			&createdAtStr, &updatedAtStr,
 			new(sql.NullString), // expires_at
 			&inst.LastDeliveryText, &inst.DataPath,
 			&errorMessage, &inst.LastAction,
+			&loginName, &adminPass, &apiKey,
+			&queryPass, &privKey,
 		); err != nil {
 			return nil, err
 		}
+
+		inst.CreatedAt, _ = time.Parse(time.RFC3339, createdAtStr)
+		inst.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAtStr)
 		if customerID.Valid {
 			inst.CustomerID = &customerID.String
 		}
 		if errorMessage.Valid {
 			inst.ErrorMessage = &errorMessage.String
+		}
+		if loginName.Valid && loginName.String != "" {
+			inst.LoginName = &loginName.String
+		}
+		if adminPass.Valid && adminPass.String != "" {
+			inst.AdminPassword = &adminPass.String
+		}
+		if apiKey.Valid && apiKey.String != "" {
+			inst.APIKey = &apiKey.String
+		}
+		if queryPass.Valid && queryPass.String != "" {
+			inst.QueryPassword = &queryPass.String
+		}
+		if privKey.Valid && privKey.String != "" {
+			inst.PrivilegeKey = &privKey.String
 		}
 		inst.SlotsApplied = slotsApplied == 1
 		instances = append(instances, &inst)

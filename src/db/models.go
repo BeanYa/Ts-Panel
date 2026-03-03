@@ -29,6 +29,12 @@ type Instance struct {
 	DataPath         string     `json:"data_path"`
 	ErrorMessage     *string    `json:"error_message"`
 	LastAction       string     `json:"last_action"`
+	// 密鑰（来自 secrets 表 JOIN）
+	LoginName     *string `json:"login_name,omitempty"`
+	AdminPassword *string `json:"admin_password,omitempty"`
+	APIKey        *string `json:"api_key,omitempty"`
+	PrivilegeKey  *string `json:"privilege_key,omitempty"`
+	QueryPassword *string `json:"query_password,omitempty"`
 }
 
 // Secret 实例密钥信息

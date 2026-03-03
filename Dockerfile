@@ -4,10 +4,10 @@ FROM golang:1.22-alpine AS builder
 RUN apk add --no-cache gcc musl-dev
 
 WORKDIR /build
-COPY go.mod go.sum ./
-RUN go mod download
-
+COPY go.mod ./
 COPY src/ ./src/
+RUN go mod tidy
+RUN go mod download
 RUN CGO_ENABLED=1 GOOS=linux go build -o ts-panel ./src/
 
 # === 运行镜像 ===

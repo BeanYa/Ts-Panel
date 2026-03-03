@@ -129,10 +129,47 @@ $('checkout-form').addEventListener('submit', async e => {
     }
 });
 
+function renderSecretsBlock(secrets) {
+    if (!secrets) return '';
+    // 字段来源兼容 checkout resp (snake_case) 和 instance obj
+    const loginName = secrets.login_name || '';
+    const adminPass = secrets.admin_password || '';
+    const apiKey = secrets.api_key || '';
+    const privKey = secrets.privilege_key || secrets.admin_privilege_key || '';
+    const queryPass = secrets.query_password || secrets.serverquery_password || '';
+
+    if (!loginName && !adminPass && !apiKey && !privKey && !queryPass) return '';
+
+    const rows = [
+        loginName ? ['账号名称 (loginname)', loginName] : null,
+        adminPass ? ['管理员密码 (password)', adminPass] : null,
+        apiKey ? ['API 密钥 (apikey)', apiKey] : null,
+        privKey ? ['特权令牌 (token)', privKey] : null,
+        queryPass ? ['Query 密码', queryPass] : null,
+    ].filter(Boolean);
+
+    return `
+    <div class="secrets-block">
+      <div class="secrets-title">🔑 服务器密钥（请妥善保管）</div>
+      ${rows.map(([label, val]) => `<div class="secret-row">
+        <span class="secret-label">${label}</span>
+        <code class="secret-value">${escapeHtml(val)}</code>
+        <button class="btn btn-ghost btn-xs" onclick="copyToClipboard('${escapeHtml(val)}')">Copy</button>
+      </div>`).join('')}
+    </div>`;
+}
+
 function showDeliveryResult(resp) {
     const card = $('delivery-result');
     show(card);
     $('delivery-text').textContent = resp.delivery_text || '';
+
+    // 密鑰区块
+    const secretsEl = $('delivery-secrets');
+    if (secretsEl) {
+        secretsEl.innerHTML = renderSecretsBlock(resp.secrets);
+        toggle(secretsEl, !!(resp.secrets));
+    }
 
     const warnContainer = $('warnings-container');
     if (resp.warnings && resp.warnings.length > 0) {
@@ -146,6 +183,7 @@ function showDeliveryResult(resp) {
 
     card.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
+
 
 // === 复制 & 分享 ===
 $('copy-btn').addEventListener('click', () => {
@@ -216,6 +254,7 @@ function statusLabel(status) {
 }
 
 function renderInstance(inst) {
+    const secretsHtml = renderSecretsBlock(inst);
     return `
   <div class="instance-card" data-id="${inst.id}">
     <div class="instance-header">
@@ -228,12 +267,14 @@ function renderInstance(inst) {
       ${inst.customer_id ? `<span class="meta-tag">CID …${inst.customer_id.slice(-6)}</span>` : '<span class="meta-tag">无客户</span>'}
     </div>
     ${inst.last_delivery_text ? `<div class="instance-delivery">${escapeHtml(inst.last_delivery_text)}</div>` : ''}
+    ${secretsHtml}
     <div class="instance-actions">
       <button class="btn btn-ghost btn-sm" data-action="copy-delivery" data-id="${inst.id}" data-text="${encodeURIComponent(inst.last_delivery_text || '')}">
         复制文本
       </button>
       <button class="btn btn-ghost btn-sm" data-action="restart" data-id="${inst.id}">重启</button>
       <button class="btn btn-ghost btn-sm" data-action="stop" data-id="${inst.id}">停止</button>
+      <button class="btn btn-ghost btn-sm" data-action="capture-secrets" data-id="${inst.id}">报密鑰</button>
       <button class="btn btn-ghost btn-sm" data-action="apply-slots" data-id="${inst.id}">设 Slots</button>
       <button class="btn btn-ghost btn-sm" data-action="recycle" data-id="${inst.id}">回收</button>
       <button class="btn btn-danger btn-sm" data-action="delete" data-id="${inst.id}">删除</button>
@@ -266,6 +307,9 @@ function bindInstanceActions() {
                 } else if (action === 'stop') {
                     await api('POST', `/instances/${id}/stop`);
                     showToast('✅ 已停止');
+                } else if (action === 'capture-secrets') {
+                    await api('POST', `/instances/${id}/capture-secrets`);
+                    showToast('✅ 密鑰已重新抓取');
                 } else if (action === 'apply-slots') {
                     await api('POST', `/instances/${id}/apply-slots`);
                     showToast('✅ Slots 已应用');

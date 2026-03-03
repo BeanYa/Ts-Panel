@@ -32,10 +32,11 @@ type CheckoutReq struct {
 
 // CheckoutResp checkout 返回
 type CheckoutResp struct {
-	Instance     *db.Instance `json:"instance"`
-	DeliveryText string       `json:"delivery_text"`
-	Warnings     []string     `json:"warnings,omitempty"`
-	Reused       bool         `json:"reused"`
+	Instance     *db.Instance   `json:"instance"`
+	DeliveryText string         `json:"delivery_text"`
+	Secrets      *CaptureResult `json:"secrets,omitempty"`
+	Warnings     []string       `json:"warnings,omitempty"`
+	Reused       bool           `json:"reused"`
 }
 
 // Checkout 核心发货流程（幂等、事务化）
@@ -133,7 +134,7 @@ func reuseRecycled(ctx context.Context, sqlDB *sql.DB, cfg *config.Config, req C
 
 	instance.Status = "running"
 	instance.LastDeliveryText = deliveryText
-	_ = writeAuditLog(sqlDB, "checkout", &instance.ID, customerID, "ok", "复用实例")
+	_ = writeAuditLog(sqlDB, "checkout", &instance.ID, &customerID, "ok", "复用实例")
 	return instance, nil
 }
 
@@ -241,11 +242,15 @@ func createNew(ctx context.Context, sqlDB *sql.DB, cfg *config.Config, req Check
 		LastAction:       "checkout",
 	}
 
-	return &CheckoutResp{
+	resp := &CheckoutResp{
 		Instance:     instance,
 		DeliveryText: deliveryText,
 		Warnings:     warnings,
-	}, nil
+	}
+	if captureResult != nil {
+		resp.Secrets = captureResult
+	}
+	return resp, nil
 }
 
 // buildDeliveryText 生成发货文本
@@ -302,15 +307,19 @@ func scanInstance(row *sql.Row) (*db.Instance, error) {
 	var customerID sql.NullString
 	var errorMessage sql.NullString
 	var slotsApplied int
+	var createdAtStr, updatedAtStr string
+	var loginName, adminPass, apiKey, queryPass, privKey sql.NullString
 
 	err := row.Scan(
 		&inst.ID, &customerID, &inst.ContainerName,
 		&inst.HostUDPPort, &inst.HostQueryPort,
 		&inst.Slots, &slotsApplied, &inst.Status,
-		&inst.CreatedAt, &inst.UpdatedAt,
+		&createdAtStr, &updatedAtStr,
 		new(sql.NullString), // expires_at 暂不使用
 		&inst.LastDeliveryText, &inst.DataPath,
 		&errorMessage, &inst.LastAction,
+		&loginName, &adminPass, &apiKey,
+		&queryPass, &privKey,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -318,12 +327,31 @@ func scanInstance(row *sql.Row) (*db.Instance, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	inst.CreatedAt, _ = time.Parse(time.RFC3339, createdAtStr)
+	inst.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAtStr)
 	if customerID.Valid {
 		inst.CustomerID = &customerID.String
 	}
 	if errorMessage.Valid {
 		inst.ErrorMessage = &errorMessage.String
 	}
+	if loginName.Valid && loginName.String != "" {
+		inst.LoginName = &loginName.String
+	}
+	if adminPass.Valid && adminPass.String != "" {
+		inst.AdminPassword = &adminPass.String
+	}
+	if apiKey.Valid && apiKey.String != "" {
+		inst.APIKey = &apiKey.String
+	}
+	if queryPass.Valid && queryPass.String != "" {
+		inst.QueryPassword = &queryPass.String
+	}
+	if privKey.Valid && privKey.String != "" {
+		inst.PrivilegeKey = &privKey.String
+	}
 	inst.SlotsApplied = slotsApplied == 1
 	return &inst, nil
 }
+

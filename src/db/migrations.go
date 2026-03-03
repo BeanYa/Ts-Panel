@@ -3,7 +3,9 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 )
+
 
 // RunMigrations 执行建表迁移（幂等）
 func RunMigrations(db *sql.DB) error {
@@ -52,11 +54,26 @@ func RunMigrations(db *sql.DB) error {
 			"create_secrets",
 			`CREATE TABLE IF NOT EXISTS secrets (
 				instance_id             TEXT PRIMARY KEY,
+				login_name              TEXT,
+				admin_password          TEXT,
+				api_key                 TEXT,
 				serverquery_password    TEXT,
 				admin_privilege_key     TEXT,
 				captured_at             TEXT,
 				FOREIGN KEY(instance_id) REFERENCES instances(id)
 			)`,
+		},
+		{
+			"alter_secrets_login_name",
+			`ALTER TABLE secrets ADD COLUMN login_name TEXT`,
+		},
+		{
+			"alter_secrets_admin_password",
+			`ALTER TABLE secrets ADD COLUMN admin_password TEXT`,
+		},
+		{
+			"alter_secrets_api_key",
+			`ALTER TABLE secrets ADD COLUMN api_key TEXT`,
 		},
 		{
 			"create_audit_logs",
@@ -73,7 +90,12 @@ func RunMigrations(db *sql.DB) error {
 	}
 
 	for _, m := range migrations {
-		if _, err := db.Exec(m.sql); err != nil {
+		_, err := db.Exec(m.sql)
+		if err != nil {
+			// ALTER TABLE ADD COLUMN 在列已存在时返回错误，属正常情况，直接跳过
+			if strings.HasPrefix(m.name, "alter_") && strings.Contains(err.Error(), "duplicate column") {
+				continue
+			}
 			return fmt.Errorf("迁移 %s 失败: %w", m.name, err)
 		}
 	}
