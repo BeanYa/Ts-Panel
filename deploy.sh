@@ -97,11 +97,18 @@ cmd_start() {
   read -rp "请输入代理地址 [默认: https://goproxy.cn,direct]: " GOPROXY
   GOPROXY=${GOPROXY:-"https://goproxy.cn,direct"}
 
+  # === 端口配置 ===
+  echo ""
+  echo "配置面板访问端口 (用于 HTTP/IP 直连):"
+  read -rp "请输入端口号 [默认: 80]: " PANEL_HTTP_PORT
+  PANEL_HTTP_PORT=${PANEL_HTTP_PORT:-80}
+
   # === 生成 .env ===
   cat > .env <<EOF
 PUBLIC_IP=${PUBLIC_IP}
 ADMIN_TOKEN=${ADMIN_TOKEN}
 GOPROXY=${GOPROXY}
+PANEL_HTTP_PORT=${PANEL_HTTP_PORT}
 HTTP_PORT=8080
 PORT_MIN=20000
 PORT_MAX=20999
@@ -120,6 +127,13 @@ EOF
 
   # === 域名模式：生成 Caddyfile ===
   if [[ "$MODE" == "2" ]]; then
+    echo "⚠️  注意: 域名模式 (Caddy) 强制需要占用 80 和 443 端口以申请证书。"
+    echo "    如果这些端口已被占用 (如 Nginx), Caddy 将无法正常工作。"
+    read -rp "确认继续? [y/N]: " CONFIRM_CADDY
+    if [[ ! "$CONFIRM_CADDY" =~ ^[Yy]$ ]]; then
+      echo "❌ 已取消部署"; exit 1
+    fi
+
     cat > Caddyfile <<EOF
 ${DOMAIN} {
     reverse_proxy ts-panel-ui:80
