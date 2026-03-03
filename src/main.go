@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
 	"log"
+	"time"
 	"ts-panel/src/api"
 	"ts-panel/src/config"
 	"ts-panel/src/db"
+	"ts-panel/src/service"
 )
 
 func main() {
@@ -30,7 +33,12 @@ func main() {
 	log.Printf("🔌 UDP 端口池: %d-%d | Query 端口池: %d-%d",
 		cfg.PortMin, cfg.PortMax, cfg.QueryPortMin, cfg.QueryPortMax)
 
-	// 4. 启动 Gin
+	// 4. 启动到期检查器（每小时）
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	service.StartExpirationChecker(ctx, sqlDB, 1*time.Hour)
+
+	// 5. 启动 Gin
 	r := api.SetupRouter(sqlDB, cfg)
 	if err := r.Run(":" + cfg.HTTPPort); err != nil {
 		log.Fatalf("服务器启动失败: %v", err)

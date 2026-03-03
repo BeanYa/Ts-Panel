@@ -26,6 +26,7 @@ func SetupRouter(db *sql.DB, cfg *config.Config) *gin.Engine {
 		instances := api.Group("/instances")
 		{
 			instances.POST("/checkout", h.Checkout)
+			instances.POST("/restore-checkout", h.RestoreCheckout)
 			instances.GET("", h.ListInstances)
 			instances.GET("/:id", h.GetInstance)
 
@@ -36,9 +37,14 @@ func SetupRouter(db *sql.DB, cfg *config.Config) *gin.Engine {
 			instances.POST("/:id/recycle", h.RecycleInstance)
 			instances.DELETE("/:id", h.DeleteInstance)
 
-			// secrets / slots
+			// secrets / slots / logs
 			instances.POST("/:id/capture-secrets", h.CaptureSecrets)
 			instances.POST("/:id/apply-slots", h.ApplySlots)
+			instances.GET("/:id/logs", h.GetContainerLogs)
+
+			// 备份 / 恢复
+			instances.GET("/:id/backup", h.BackupInstance)
+			instances.POST("/:id/restore", h.RestoreInstance)
 		}
 	}
 

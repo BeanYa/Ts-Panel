@@ -39,17 +39,17 @@ type Instance struct {
 
 // Secret 实例密钥信息
 type Secret struct {
-	InstanceID            string     `json:"instance_id"`
-	ServerQueryPassword   *string    `json:"serverquery_password"`
-	AdminPrivilegeKey     *string    `json:"admin_privilege_key"`
-	CapturedAt            *time.Time `json:"captured_at"`
+	InstanceID          string     `json:"instance_id"`
+	ServerQueryPassword *string    `json:"serverquery_password"`
+	AdminPrivilegeKey   *string    `json:"admin_privilege_key"`
+	CapturedAt          *time.Time `json:"captured_at"`
 }
 
 // AuditLog 操作审计日志
 type AuditLog struct {
 	ID         string    `json:"id"`
 	CreatedAt  time.Time `json:"created_at"`
-	Action     string    `json:"action"`     // checkout|start|stop|restart|recycle|delete|capture_secrets|apply_slots
+	Action     string    `json:"action"` // checkout|start|stop|restart|recycle|delete|capture_secrets|apply_slots
 	InstanceID *string   `json:"instance_id"`
 	CustomerID *string   `json:"customer_id"`
 	Result     string    `json:"result"` // ok|err

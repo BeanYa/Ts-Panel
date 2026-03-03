@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 	"ts-panel/src/config"
 	"ts-panel/src/db"
@@ -17,13 +19,14 @@ import (
 
 // CheckoutReq checkout 请求
 type CheckoutReq struct {
-	Platform     string     `json:"platform" binding:"required"`
-	PlatformUser string     `json:"platform_user" binding:"required"`
-	OrderNo      *string    `json:"order_no"`
-	Note         *string    `json:"note"`
-	Slots        int        `json:"slots"`
-	ExpiresAt    *time.Time `json:"expires_at"`
-	ReuseRecycled bool      `json:"reuse_recycled"`
+	Platform      string     `json:"platform" binding:"required"`
+	PlatformUser  string     `json:"platform_user" binding:"required"`
+	OrderNo       *string    `json:"order_no"`
+	Note          *string    `json:"note"`
+	Slots         int        `json:"slots"`
+	Duration      string     `json:"duration"`
+	ExpiresAt     *time.Time `json:"expires_at"`
+	ReuseRecycled bool       `json:"reuse_recycled"`
 	// 覆盖默认资源限制
 	CPU    string `json:"cpu"`
 	Memory string `json:"memory"`
@@ -53,6 +56,13 @@ func Checkout(ctx context.Context, sqlDB *sql.DB, cfg *config.Config, req Checko
 	}
 	if req.Pids <= 0 {
 		req.Pids = cfg.DefaultPids
+	}
+	// Duration → ExpiresAt
+	if req.ExpiresAt == nil && req.Duration != "" {
+		if d, err := parseDuration(req.Duration); err == nil {
+			t := time.Now().UTC().Add(d)
+			req.ExpiresAt = &t
+		}
 	}
 
 	// 1. 幂等检查：相同 platform+order_no 已存在实例
@@ -168,13 +178,18 @@ func createNew(ctx context.Context, sqlDB *sql.DB, cfg *config.Config, req Check
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
+	var expiresAtStr *string
+	if req.ExpiresAt != nil {
+		s := req.ExpiresAt.UTC().Format(time.RFC3339)
+		expiresAtStr = &s
+	}
 	_, err = tx.Exec(`
 		INSERT INTO instances
-		(id, customer_id, container_name, host_udp_port, host_query_port, slots, status, created_at, updated_at, data_path, last_action)
-		VALUES (?, ?, ?, ?, ?, ?, 'creating', ?, ?, ?, 'checkout')`,
+		(id, customer_id, container_name, host_udp_port, host_query_port, slots, status, created_at, updated_at, expires_at, data_path, last_action)
+		VALUES (?, ?, ?, ?, ?, ?, 'creating', ?, ?, ?, ?, 'checkout')`,
 		instanceID, customerID, containerName,
 		ports.UDPPort, ports.QueryPort,
-		req.Slots, now, now, dataPath)
+		req.Slots, now, now, expiresAtStr, dataPath)
 	if err != nil {
 		_ = tx.Rollback()
 		return nil, fmt.Errorf("DB_ERROR: 插入实例失败: %w", err)
@@ -234,6 +249,7 @@ func createNew(ctx context.Context, sqlDB *sql.DB, cfg *config.Config, req Check
 		HostUDPPort:      ports.UDPPort,
 		HostQueryPort:    ports.QueryPort,
 		Slots:            req.Slots,
+		ExpiresAt:        req.ExpiresAt,
 		Status:           "running",
 		CreatedAt:        time.Now().UTC(),
 		UpdatedAt:        time.Now().UTC(),
@@ -308,6 +324,7 @@ func scanInstance(row *sql.Row) (*db.Instance, error) {
 	var errorMessage sql.NullString
 	var slotsApplied int
 	var createdAtStr, updatedAtStr string
+	var expiresAtStr sql.NullString
 	var loginName, adminPass, apiKey, queryPass, privKey sql.NullString
 
 	err := row.Scan(
@@ -315,7 +332,7 @@ func scanInstance(row *sql.Row) (*db.Instance, error) {
 		&inst.HostUDPPort, &inst.HostQueryPort,
 		&inst.Slots, &slotsApplied, &inst.Status,
 		&createdAtStr, &updatedAtStr,
-		new(sql.NullString), // expires_at 暂不使用
+		&expiresAtStr,
 		&inst.LastDeliveryText, &inst.DataPath,
 		&errorMessage, &inst.LastAction,
 		&loginName, &adminPass, &apiKey,
@@ -330,6 +347,10 @@ func scanInstance(row *sql.Row) (*db.Instance, error) {
 
 	inst.CreatedAt, _ = time.Parse(time.RFC3339, createdAtStr)
 	inst.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAtStr)
+	if expiresAtStr.Valid && expiresAtStr.String != "" {
+		t, _ := time.Parse(time.RFC3339, expiresAtStr.String)
+		inst.ExpiresAt = &t
+	}
 	if customerID.Valid {
 		inst.CustomerID = &customerID.String
 	}
@@ -355,3 +376,26 @@ func scanInstance(row *sql.Row) (*db.Instance, error) {
 	return &inst, nil
 }
 
+// parseDuration 解析自定义时间格式，如 "30d", "7d", "1h"
+func parseDuration(s string) (time.Duration, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, fmt.Errorf("空字符串")
+	}
+	unit := s[len(s)-1:]
+	valStr := s[:len(s)-1]
+	val, err := strconv.Atoi(valStr)
+	if err != nil {
+		return 0, err
+	}
+	switch unit {
+	case "d":
+		return time.Duration(val) * 24 * time.Hour, nil
+	case "h":
+		return time.Duration(val) * time.Hour, nil
+	case "m":
+		return time.Duration(val) * time.Minute, nil
+	default:
+		return 0, fmt.Errorf("不支持的时间单位: %s", unit)
+	}
+}

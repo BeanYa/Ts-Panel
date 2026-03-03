@@ -115,6 +115,7 @@ $('checkout-form').addEventListener('submit', async e => {
             order_no: $('order-no').value.trim() || undefined,
             note: $('note').value.trim() || undefined,
             slots: parseInt($('slots').value) || 15,
+            duration: $('duration').value || undefined,
             reuse_recycled: $('reuse-recycled').checked,
         };
 
@@ -265,21 +266,26 @@ function renderInstance(inst) {
       <span class="meta-tag">UDP :${inst.host_udp_port}</span>
       <span class="meta-tag">Slots ${inst.slots}${inst.slots_applied ? ' ✓' : ' ⚠'}</span>
       ${inst.customer_id ? `<span class="meta-tag">CID …${inst.customer_id.slice(-6)}</span>` : '<span class="meta-tag">无客户</span>'}
+      <span class="meta-tag">创建 ${formatTime(inst.created_at)}</span>
+      ${inst.expires_at ? `<span class="meta-tag ${isExpired(inst.expires_at) ? 'meta-tag-expired' : ''}">到期 ${formatTime(inst.expires_at)}</span>` : '<span class="meta-tag">永久</span>'}
     </div>
     ${inst.last_delivery_text ? `<div class="instance-delivery">${escapeHtml(inst.last_delivery_text)}</div>` : ''}
     ${secretsHtml}
     <div class="instance-actions">
-      <button class="btn btn-ghost btn-sm" data-action="copy-delivery" data-id="${inst.id}" data-text="${encodeURIComponent(inst.last_delivery_text || '')}">
-        复制文本
-      </button>
-      <button class="btn btn-ghost btn-sm" data-action="restart" data-id="${inst.id}">重启</button>
-      <button class="btn btn-ghost btn-sm" data-action="stop" data-id="${inst.id}">停止</button>
-      <button class="btn btn-ghost btn-sm" data-action="capture-secrets" data-id="${inst.id}">报密鑰</button>
-      <button class="btn btn-ghost btn-sm" data-action="apply-slots" data-id="${inst.id}">设 Slots</button>
-      <button class="btn btn-ghost btn-sm" data-action="recycle" data-id="${inst.id}">回收</button>
-      <button class="btn btn-danger btn-sm" data-action="delete" data-id="${inst.id}">删除</button>
+        <button class="btn btn-ghost btn-sm" data-action="copy-delivery" data-id="${inst.id}" data-text="${encodeURIComponent(inst.last_delivery_text || '')}">
+            复制文本
+        </button>
+        <button class="btn btn-ghost btn-sm" data-action="logs" data-id="${inst.id}" data-name="${escapeHtml(inst.container_name)}">📋 日志</button>
+        <button class="btn btn-ghost btn-sm" data-action="backup" data-id="${inst.id}">💾 备份</button>
+        <button class="btn btn-ghost btn-sm" data-action="restore" data-id="${inst.id}">📥 恢复</button>
+        <button class="btn btn-ghost btn-sm" data-action="restart" data-id="${inst.id}">重启</button>
+        <button class="btn btn-ghost btn-sm" data-action="stop" data-id="${inst.id}">停止</button>
+        <button class="btn btn-ghost btn-sm" data-action="capture-secrets" data-id="${inst.id}">报密钥</button>
+        <button class="btn btn-ghost btn-sm" data-action="apply-slots" data-id="${inst.id}">设 Slots</button>
+        <button class="btn btn-ghost btn-sm" data-action="recycle" data-id="${inst.id}">回收</button>
+        <button class="btn btn-danger btn-sm" data-action="delete" data-id="${inst.id}">删除</button>
     </div>
-  </div>`;
+  </div > `;
 }
 
 function bindInstanceActions() {
@@ -294,7 +300,7 @@ function bindInstanceActions() {
                 if (action === 'recycle') {
                     const ok = await confirm('回收实例', '停止容器并解绑客户？数据保留。');
                     if (!ok) return;
-                    await api('POST', `/instances/${id}/recycle`, { wipe_data: false });
+                    await api('POST', `/ instances / ${id}/recycle`, { wipe_data: false });
                     showToast('✅ 已回收');
                 } else if (action === 'delete') {
                     const ok = await confirm('彻底删除', '将删除容器和数据，无法恢复！');
@@ -307,9 +313,41 @@ function bindInstanceActions() {
                 } else if (action === 'stop') {
                     await api('POST', `/instances/${id}/stop`);
                     showToast('✅ 已停止');
+                } else if (action === 'logs') {
+                    openLogsModal(id, btn.dataset.name);
+                    return;
+                } else if (action === 'backup') {
+                    // 触发下载
+                    window.open(`/api/instances/${id}/backup?token=${encodeURIComponent(state.token)}`, '_blank');
+                    return;
+                } else if (action === 'restore') {
+                    const ok = await confirm('恢复实例', '将上传备份文件覆盖当前数据并重启容器，确认？');
+                    if (!ok) return;
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.accept = '.tar.gz,.tgz';
+                    input.onchange = async () => {
+                        if (!input.files[0]) return;
+                        const fd = new FormData();
+                        fd.append('file', input.files[0]);
+                        try {
+                            const res = await fetch(`/api/instances/${id}/restore`, {
+                                method: 'POST',
+                                headers: { 'X-Admin-Token': state.token },
+                                body: fd,
+                            });
+                            if (!res.ok) throw new Error((await res.json())?.error?.message || 'HTTP ' + res.status);
+                            showToast('✅ 恢复成功');
+                            await loadInstances();
+                        } catch (err) {
+                            showToast('❌ ' + err.message, 5000);
+                        }
+                    };
+                    input.click();
+                    return;
                 } else if (action === 'capture-secrets') {
                     await api('POST', `/instances/${id}/capture-secrets`);
-                    showToast('✅ 密鑰已重新抓取');
+                    showToast('✅ 密钥已重新抓取');
                 } else if (action === 'apply-slots') {
                     await api('POST', `/instances/${id}/apply-slots`);
                     showToast('✅ Slots 已应用');
@@ -322,10 +360,130 @@ function bindInstanceActions() {
     });
 }
 
+// === 时间格式化 ===
+function formatTime(isoStr) {
+    if (!isoStr) return '-';
+    const d = new Date(isoStr);
+    if (isNaN(d.getTime())) return '-';
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+function isExpired(isoStr) {
+    if (!isoStr) return false;
+    return new Date(isoStr) < new Date();
+}
+
 // === XSS 防护 ===
 function escapeHtml(s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
+
+// === 日志弹窗 ===
+let logsAutoTimer = null;
+let logsCurrentId = null;
+
+async function fetchLogs(instanceId) {
+    try {
+        const data = await api('GET', `/instances/${instanceId}/logs?tail=200`);
+        const content = $('logs-content');
+        content.textContent = data.logs || '(空日志)';
+        // 自动滚到底部
+        content.scrollTop = content.scrollHeight;
+    } catch (err) {
+        $('logs-content').textContent = '❌ 加载失败: ' + err.message;
+    }
+}
+
+function openLogsModal(instanceId, containerName) {
+    logsCurrentId = instanceId;
+    $('logs-modal-title').textContent = `容器日志 — ${containerName}`;
+    $('logs-content').textContent = '加载中...';
+    show($('logs-modal'));
+    fetchLogs(instanceId);
+    // 启动自动刷新
+    if ($('logs-auto-refresh').checked) {
+        startLogsAutoRefresh();
+    }
+}
+
+function closeLogsModal() {
+    hide($('logs-modal'));
+    stopLogsAutoRefresh();
+    logsCurrentId = null;
+}
+
+function startLogsAutoRefresh() {
+    stopLogsAutoRefresh();
+    logsAutoTimer = setInterval(() => {
+        if (logsCurrentId) fetchLogs(logsCurrentId);
+    }, 5000);
+}
+
+function stopLogsAutoRefresh() {
+    if (logsAutoTimer) {
+        clearInterval(logsAutoTimer);
+        logsAutoTimer = null;
+    }
+}
+
+$('logs-close-btn').addEventListener('click', closeLogsModal);
+$('logs-refresh-btn').addEventListener('click', () => {
+    if (logsCurrentId) fetchLogs(logsCurrentId);
+});
+$('logs-auto-refresh').addEventListener('change', e => {
+    if (e.target.checked) {
+        startLogsAutoRefresh();
+    } else {
+        stopLogsAutoRefresh();
+    }
+});
+// 点击遮罩关闭
+$('logs-modal').addEventListener('click', e => {
+    if (e.target === $('logs-modal')) closeLogsModal();
+});
+
+// === 从备份恢复（发货页） ===
+$('restore-checkout-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const fileInput = $('rc-file');
+    if (!fileInput.files[0]) {
+        showToast('❌ 请选择备份文件');
+        return;
+    }
+    const platformUser = $('rc-platform-user').value.trim();
+    if (!platformUser) {
+        showToast('❌ 请填写平台用户名');
+        return;
+    }
+
+    show($('rc-spinner'));
+    $('rc-btn-text').textContent = '恢复中…';
+    $('rc-btn').disabled = true;
+
+    try {
+        const fd = new FormData();
+        fd.append('file', fileInput.files[0]);
+        fd.append('platform', $('rc-platform').value);
+        fd.append('platform_user', platformUser);
+        fd.append('duration', $('rc-duration').value);
+
+        const res = await fetch('/api/instances/restore-checkout', {
+            method: 'POST',
+            headers: { 'X-Admin-Token': state.token },
+            body: fd,
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data?.error?.message || 'HTTP ' + res.status);
+        showDeliveryResult(data);
+        showToast('✅ 从备份恢复成功');
+    } catch (err) {
+        showToast('❌ ' + err.message, 5000);
+    } finally {
+        hide($('rc-spinner'));
+        $('rc-btn-text').textContent = '上传并恢复';
+        $('rc-btn').disabled = false;
+    }
+});
 
 // === 初始化 ===
 (function init() {

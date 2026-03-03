@@ -110,7 +110,7 @@ func Delete(ctx context.Context, sqlDB *sql.DB, instanceID string) error {
 }
 
 // GetInstanceByID 按 ID 查询实例
- func GetInstanceByID(sqlDB *sql.DB, instanceID string) (*db.Instance, error) {
+func GetInstanceByID(sqlDB *sql.DB, instanceID string) (*db.Instance, error) {
 	row := sqlDB.QueryRow(`
 		SELECT i.id, i.customer_id, i.container_name, i.host_udp_port, i.host_query_port,
 		       i.slots, i.slots_applied, i.status, i.created_at, i.updated_at,
@@ -146,6 +146,7 @@ func GetAllInstances(sqlDB *sql.DB) ([]*db.Instance, error) {
 		var errorMessage sql.NullString
 		var slotsApplied int
 		var createdAtStr, updatedAtStr string
+		var expiresAtStr sql.NullString
 		var loginName, adminPass, apiKey, queryPass, privKey sql.NullString
 
 		if err := rows.Scan(
@@ -153,7 +154,7 @@ func GetAllInstances(sqlDB *sql.DB) ([]*db.Instance, error) {
 			&inst.HostUDPPort, &inst.HostQueryPort,
 			&inst.Slots, &slotsApplied, &inst.Status,
 			&createdAtStr, &updatedAtStr,
-			new(sql.NullString), // expires_at
+			&expiresAtStr,
 			&inst.LastDeliveryText, &inst.DataPath,
 			&errorMessage, &inst.LastAction,
 			&loginName, &adminPass, &apiKey,
@@ -164,6 +165,10 @@ func GetAllInstances(sqlDB *sql.DB) ([]*db.Instance, error) {
 
 		inst.CreatedAt, _ = time.Parse(time.RFC3339, createdAtStr)
 		inst.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAtStr)
+		if expiresAtStr.Valid && expiresAtStr.String != "" {
+			t, _ := time.Parse(time.RFC3339, expiresAtStr.String)
+			inst.ExpiresAt = &t
+		}
 		if customerID.Valid {
 			inst.CustomerID = &customerID.String
 		}
