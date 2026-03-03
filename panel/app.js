@@ -14,6 +14,17 @@ const show = el => { if (el) el.classList.remove('hide'); };
 const hide = el => { if (el) el.classList.add('hide'); };
 const toggle = (el, v) => v ? show(el) : hide(el);
 
+// === Mouse Spotlight Effect ===
+document.addEventListener('mousemove', (e) => {
+    document.querySelectorAll('.card').forEach(card => {
+        const rect = card.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        card.style.setProperty('--mouse-x', `${x}px`);
+        card.style.setProperty('--mouse-y', `${y}px`);
+    });
+});
+
 // === 视图切换 ===
 function showView(viewId) {
     $('view-login').classList.toggle('hide', viewId !== 'login');
