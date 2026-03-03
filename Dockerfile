@@ -1,6 +1,9 @@
 # 多阶段构建：Go 编译 → Alpine 运行
 FROM golang:1.22-alpine AS builder
 
+ARG GOPROXY
+ENV GOPROXY=${GOPROXY}
+
 RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories && \
     apk add --no-cache gcc musl-dev
 

@@ -91,10 +91,17 @@ cmd_start() {
     fi
   fi
 
+  # === Go 代理配置 ===
+  echo ""
+  echo "是否需要配置 Go 代理 (GOPROXY)?"
+  read -rp "请输入代理地址 [默认: https://goproxy.cn,direct]: " GOPROXY
+  GOPROXY=${GOPROXY:-"https://goproxy.cn,direct"}
+
   # === 生成 .env ===
   cat > .env <<EOF
 PUBLIC_IP=${PUBLIC_IP}
 ADMIN_TOKEN=${ADMIN_TOKEN}
+GOPROXY=${GOPROXY}
 HTTP_PORT=8080
 PORT_MIN=20000
 PORT_MAX=20999
