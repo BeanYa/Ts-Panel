@@ -1,0 +1,3 @@
+{$DOMAIN} {
+    reverse_proxy ts-panel-ui:80
+}

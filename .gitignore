@@ -5,3 +5,15 @@ dist/
 .env
 .idea/
 .vscode/
+
+# Go
+ts-panel
+ts-panel.exe
+ts-controller
+ts-controller.exe
+
+# Data
+data/
+*.db
+*.db-shm
+*.db-wal

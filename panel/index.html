@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ts-panel — TeamSpeak 发货面板</title>
+  <meta name="description" content="TeamSpeak 服务器容器管理与发货系统">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- 背景光团 -->
+  <div class="bg-layer" aria-hidden="true">
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    <div class="noise"></div>
+    <div class="grid"></div>
+  </div>
+
+  <!-- 应用容器 -->
+  <div id="app">
+    <!-- === 登录视图 === -->
+    <div id="view-login" class="view">
+      <div class="auth-card card">
+        <div class="brand">
+          <span class="brand-icon">🎧</span>
+          <h1 class="brand-title">ts-panel</h1>
+          <p class="brand-sub">TeamSpeak 发货控制台</p>
+        </div>
+        <form id="login-form" class="form" autocomplete="off">
+          <div class="field">
+            <label for="admin-token" class="field-label">Admin Token</label>
+            <input id="admin-token" type="password" class="field-input" placeholder="输入管理员令牌" autocomplete="current-password">
+          </div>
+          <button type="submit" class="btn btn-primary btn-full" id="login-btn">
+            <span class="btn-text">进入控制台</span>
+            <span class="btn-glow"></span>
+          </button>
+          <p id="login-error" class="error-msg hide"></p>
+        </form>
+      </div>
+    </div>
+
+    <!-- === 主控制台 === -->
+    <div id="view-main" class="view hide">
+      <!-- 导航栏 -->
+      <nav class="navbar">
+        <div class="navbar-brand">
+          <span class="brand-icon-sm">🎧</span>
+          <span class="navbar-title">ts-panel</span>
+        </div>
+        <div class="navbar-actions">
+          <button class="tab-btn active" id="tab-checkout" data-tab="checkout">发货</button>
+          <button class="tab-btn" id="tab-instances" data-tab="instances">实例列表</button>
+          <button class="btn btn-ghost btn-sm" id="logout-btn">退出</button>
+        </div>
+      </nav>
+
+      <!-- 标签页内容 -->
+      <main class="main-content">
+
+        <!-- 发货页 -->
+        <section id="tab-checkout-content" class="tab-content active">
+          <div class="section-header">
+            <h2 class="section-title">创建并发货</h2>
+            <p class="section-desc">填写客户信息，系统将自动创建 TeamSpeak 容器并生成发货文本。</p>
+          </div>
+
+          <div class="card checkout-card">
+            <form id="checkout-form" class="form">
+              <div class="form-row">
+                <div class="field">
+                  <label for="platform" class="field-label">平台 <span class="req">*</span></label>
+                  <select id="platform" class="field-input field-select">
+                    <option value="xianyu">闲鱼</option>
+                    <option value="taobao">淘宝</option>
+                    <option value="other">其他</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="platform-user" class="field-label">平台用户名 <span class="req">*</span></label>
+                  <input id="platform-user" type="text" class="field-input" placeholder="买家用户名或 ID">
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="field">
+                  <label for="order-no" class="field-label">订单号</label>
+                  <input id="order-no" type="text" class="field-input" placeholder="可选，用于幂等校验">
+                </div>
+                <div class="field">
+                  <label for="slots" class="field-label">人数上限</label>
+                  <input id="slots" type="number" class="field-input" value="15" min="1" max="512">
+                </div>
+              </div>
+
+              <div class="field">
+                <label for="note" class="field-label">备注</label>
+                <input id="note" type="text" class="field-input" placeholder="可选，内部备注">
+              </div>
+
+              <div class="form-row">
+                <label class="checkbox-label">
+                  <input type="checkbox" id="reuse-recycled" class="checkbox">
+                  <span class="checkbox-text">优先复用回收实例</span>
+                </label>
+              </div>
+
+              <button type="submit" class="btn btn-primary btn-full" id="checkout-btn">
+                <span class="btn-spinner hide" id="checkout-spinner">⏳</span>
+                <span class="btn-text" id="checkout-btn-text">创建并发货</span>
+                <span class="btn-glow"></span>
+              </button>
+            </form>
+          </div>
+
+          <!-- 发货结果 -->
+          <div id="delivery-result" class="card delivery-card hide">
+            <div class="delivery-header">
+              <span class="delivery-badge">✅ 发货成功</span>
+              <div class="delivery-actions">
+                <button class="btn btn-ghost btn-sm" id="copy-btn">复制</button>
+                <button class="btn btn-ghost btn-sm" id="share-btn">分享</button>
+              </div>
+            </div>
+            <pre id="delivery-text" class="delivery-text"></pre>
+            <div id="warnings-container" class="warnings hide"></div>
+          </div>
+        </section>
+
+        <!-- 实例列表 -->
+        <section id="tab-instances-content" class="tab-content" style="display:none;">
+          <div class="section-header">
+            <h2 class="section-title">实例列表</h2>
+            <button class="btn btn-ghost btn-sm" id="refresh-btn">🔄 刷新</button>
+          </div>
+          <div id="instances-loading" class="loading-state">加载中...</div>
+          <div id="instances-empty" class="empty-state hide">
+            <span class="empty-icon">📭</span>
+            <p>暂无实例</p>
+          </div>
+          <div id="instances-list" class="instances-grid hide"></div>
+        </section>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- 全局 Toast -->
+  <div id="toast" class="toast hide"></div>
+
+  <!-- 操作确认弹窗 -->
+  <div id="confirm-modal" class="modal-overlay hide">
+    <div class="modal card">
+      <h3 class="modal-title" id="modal-title">确认操作</h3>
+      <p class="modal-body" id="modal-body"></p>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="modal-cancel">取消</button>
+        <button class="btn btn-danger" id="modal-confirm">确认</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

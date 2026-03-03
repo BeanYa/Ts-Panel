@@ -1,0 +1,35 @@
+services:
+  controller:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ts-panel-controller
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${DATA_ROOT:-/data}:/data
+    networks:
+      - ts-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  panel:
+    build:
+      context: ./panel
+      dockerfile: Dockerfile
+    container_name: ts-panel-ui
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - controller
+    networks:
+      - ts-net
+
+networks:
+  ts-net:
+    name: ts-panel-net
