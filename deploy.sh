@@ -172,7 +172,8 @@ EOF
   # === 启动 ===
   echo ""
   echo "🚀 正在构建并启动服务..."
-  docker compose up -d --build
+  docker compose build --no-cache
+  docker compose up -d
 
   echo ""
   echo "╔══════════════════════════════════════╗"
