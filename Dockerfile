@@ -15,7 +15,7 @@ RUN go mod download
 RUN CGO_ENABLED=1 GOOS=linux go build -o ts-panel ./src/
 
 # === 运行镜像 ===
-FROM alpine:3.19
+FROM alpine
 RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories && \
     apk add --no-cache ca-certificates docker-cli tzdata && \
     cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
