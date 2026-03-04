@@ -11,7 +11,7 @@ COPY src/ ./src/
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o ts-panel ./src/
 
 # === 运行镜像 (Alpine + 阿里云源) ===
-FROM alpine:3.19
+FROM alpine:latest
 RUN sed -i 's|dl-cdn.alpinelinux.org|mirrors.aliyun.com|g' /etc/apk/repositories && \
     apk add --no-cache ca-certificates docker-cli tzdata && \
     cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
