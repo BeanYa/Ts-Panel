@@ -12,9 +12,9 @@ import (
 
 var (
 	// Server Query Admin Account 区块
-	reLoginName    = regexp.MustCompile(`(?i)loginname\s*=\s*"([^"]+)"`)
-	reAdminPass    = regexp.MustCompile(`(?i)loginname\s*=\s*"[^"]+",\s*password\s*=\s*"([^"]+)"`)
-	reAPIKey       = regexp.MustCompile(`(?i)apikey\s*=\s*"([^"]+)"`)
+	reLoginName = regexp.MustCompile(`(?i)loginname\s*=\s*"([^"]+)"`)
+	reAdminPass = regexp.MustCompile(`(?i)loginname\s*=\s*"[^"]+",\s*password\s*=\s*"([^"]+)"`)
+	reAPIKey    = regexp.MustCompile(`(?i)apikey\s*=\s*"([^"]+)"`)
 
 	// Admin privilege token (首次创建服务器时的 token=xxx 行)
 	rePrivilegeKey = regexp.MustCompile(`(?i)token\s*=\s*([A-Za-z0-9+/=]{20,})`)
@@ -99,6 +99,12 @@ func parseSecrets(logs string) *CaptureResult {
 			}
 		}
 	}
+
+	// 特殊逻辑：如果抓到了 serveradmin 的 password，但没抓到 query_password，则同步
+	if result.QueryPassword == nil && result.AdminPassword != nil && result.LoginName != nil && *result.LoginName == "serveradmin" {
+		result.QueryPassword = result.AdminPassword
+	}
+
 	return result
 }
 

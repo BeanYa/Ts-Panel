@@ -24,7 +24,14 @@ func ApplySlots(ctx context.Context, db *sql.DB, instanceID, containerName strin
 
 		// 获取 serverquery_password
 		var password sql.NullString
-		if err := db.QueryRow(`SELECT serverquery_password FROM secrets WHERE instance_id = ?`, instanceID).Scan(&password); err != nil || !password.Valid {
+		// 优先查 serverquery_password，如果没找到或为空，尝试拿 serveradmin 的 admin_password
+		err := db.QueryRow(`
+			SELECT COALESCE(NULLIF(serverquery_password, ''), admin_password) 
+			FROM secrets 
+			WHERE instance_id = ? AND (serverquery_password IS NOT NULL OR login_name = 'serveradmin')
+		`, instanceID).Scan(&password)
+
+		if err != nil || !password.Valid || password.String == "" {
 			lastErr = fmt.Errorf("未找到 serverquery_password")
 			continue
 		}
