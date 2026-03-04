@@ -224,6 +224,25 @@ EOF
   sudo mkdir -p /data/db /data/instances
   echo "✅ 数据目录已准备"
 
+  # === 配置 Docker 镜像加速 ===
+  if ! grep -q "registry-mirrors" /etc/docker/daemon.json 2>/dev/null; then
+    echo "🔧 配置 Docker 镜像加速器..."
+    sudo mkdir -p /etc/docker
+    sudo tee /etc/docker/daemon.json > /dev/null <<'DAEMON'
+{
+  "registry-mirrors": [
+    "https://docker.m.daocloud.io",
+    "https://mirror.ccs.tencentyun.com"
+  ]
+}
+DAEMON
+    sudo systemctl daemon-reload
+    sudo systemctl restart docker
+    echo "✅ Docker 镜像加速已配置"
+  else
+    echo "✅ Docker 镜像加速已存在，跳过配置"
+  fi
+
   # === 启动 ===
   echo ""
   echo "🚀 正在构建并启动服务..."
