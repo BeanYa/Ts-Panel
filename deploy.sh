@@ -13,13 +13,24 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # ----- 帮助 / 默认提示 ------------------------------------------
 usage() {
   echo ""
-  echo "╔══════════════════════════════════════╗"
-  echo "║      ts-panel 管理脚本               ║"
-  echo "╠══════════════════════════════════════╣"
-  echo "║  用法:                               ║"
-  echo "║    ./deploy.sh start                ║"
-  echo "║    ./deploy.sh stop                 ║"
-  echo "╚══════════════════════════════════════╝"
+  echo "╔══════════════════════════════════════════════════════════╗"
+  echo "║      ts-panel 管理脚本                                  ║"
+  echo "╠══════════════════════════════════════════════════════════╣"
+  echo "║  用法:                                                  ║"
+  echo "║    ./deploy.sh start [选项]     启动服务                ║"
+  echo "║    ./deploy.sh stop             停止服务                ║"
+  echo "╠══════════════════════════════════════════════════════════╣"
+  echo "║  选项 (均可选，未指定则交互式输入):                      ║"
+  echo "║    --ip       <IP>       服务器公网 IP                  ║"
+  echo "║    --token    <TOKEN>    Admin Token                    ║"
+  echo "║    --port     <PORT>     面板端口 (默认 80)             ║"
+  echo "║    --mode     <1|2>      1=IP直连  2=域名模式           ║"
+  echo "║    --domain   <DOMAIN>   域名 (mode=2 时必填)           ║"
+  echo "║    --goproxy  <URL>      Go 代理地址                    ║"
+  echo "╠══════════════════════════════════════════════════════════╣"
+  echo "║  示例:                                                  ║"
+  echo "║    ./deploy.sh start --ip 1.2.3.4 --token abc --port 80 ║"
+  echo "╚══════════════════════════════════════════════════════════╝"
   echo ""
 }
 
@@ -54,6 +65,20 @@ cmd_stop() {
 
 # ----- start 子命令 --------------------------------------------
 cmd_start() {
+  # --- 解析命令行参数 ---
+  local ARG_IP="" ARG_TOKEN="" ARG_MODE="" ARG_DOMAIN="" ARG_GOPROXY="" ARG_PORT=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --ip)         ARG_IP="$2";       shift 2 ;;
+      --token)      ARG_TOKEN="$2";    shift 2 ;;
+      --mode)       ARG_MODE="$2";     shift 2 ;;
+      --domain)     ARG_DOMAIN="$2";   shift 2 ;;
+      --goproxy)    ARG_GOPROXY="$2";  shift 2 ;;
+      --port)       ARG_PORT="$2";     shift 2 ;;
+      *) echo "❌ 未知参数: $1"; exit 1 ;;
+    esac
+  done
+
   echo ""
   echo "╔══════════════════════════════════════╗"
   echo "║    ts-panel 一键启动脚本             ║"
@@ -62,46 +87,76 @@ cmd_start() {
 
   cd "$SCRIPT_DIR"
 
-  # === 输入公网 IP ===
-  read -rp "请输入服务器公网 IP: " PUBLIC_IP
+  # === 公网 IP ===
+  if [[ -n "$ARG_IP" ]]; then
+    PUBLIC_IP="$ARG_IP"
+    echo "📌 公网 IP: $PUBLIC_IP"
+  else
+    read -rp "请输入服务器公网 IP: " PUBLIC_IP
+  fi
   if [[ -z "$PUBLIC_IP" ]]; then
     echo "❌ 公网 IP 不能为空"; exit 1
   fi
 
-  # === 输入 Admin Token ===
-  read -rsp "请输入 Admin Token（不会显示）: " ADMIN_TOKEN
-  echo ""
+  # === Admin Token ===
+  if [[ -n "$ARG_TOKEN" ]]; then
+    ADMIN_TOKEN="$ARG_TOKEN"
+    echo "📌 Admin Token: [已设置]"
+  else
+    read -rsp "请输入 Admin Token（不会显示）: " ADMIN_TOKEN
+    echo ""
+  fi
   if [[ -z "$ADMIN_TOKEN" ]]; then
     echo "❌ Admin Token 不能为空"; exit 1
   fi
 
   # === 部署模式 ===
-  echo ""
-  echo "选择部署模式:"
-  echo "  1) IP 直连模式（HTTP，适合测试）"
-  echo "  2) 域名模式（Caddy 自动 HTTPS）"
-  read -rp "请输入 1 或 2 [默认 1]: " MODE
-  MODE=${MODE:-1}
+  if [[ -n "$ARG_MODE" ]]; then
+    MODE="$ARG_MODE"
+    echo "📌 部署模式: $MODE"
+  else
+    echo ""
+    echo "选择部署模式:"
+    echo "  1) IP 直连模式（HTTP，适合测试）"
+    echo "  2) 域名模式（Caddy 自动 HTTPS）"
+    read -rp "请输入 1 或 2 [默认 1]: " MODE
+    MODE=${MODE:-1}
+  fi
 
   DOMAIN=""
   if [[ "$MODE" == "2" ]]; then
-    read -rp "请输入域名（如 ts.example.com）: " DOMAIN
+    if [[ -n "$ARG_DOMAIN" ]]; then
+      DOMAIN="$ARG_DOMAIN"
+      echo "📌 域名: $DOMAIN"
+    else
+      read -rp "请输入域名（如 ts.example.com）: " DOMAIN
+    fi
     if [[ -z "$DOMAIN" ]]; then
       echo "❌ 域名不能为空"; exit 1
     fi
   fi
 
   # === Go 代理配置 ===
-  echo ""
-  echo "是否需要配置 Go 代理 (GOPROXY)?"
-  read -rp "请输入代理地址 [默认: https://goproxy.cn,direct]: " GOPROXY
-  GOPROXY=${GOPROXY:-"https://goproxy.cn,direct"}
+  if [[ -n "$ARG_GOPROXY" ]]; then
+    GOPROXY="$ARG_GOPROXY"
+    echo "📌 GOPROXY: $GOPROXY"
+  else
+    echo ""
+    echo "是否需要配置 Go 代理 (GOPROXY)?"
+    read -rp "请输入代理地址 [默认: https://goproxy.cn,direct]: " GOPROXY
+    GOPROXY=${GOPROXY:-"https://goproxy.cn,direct"}
+  fi
 
   # === 端口配置 ===
-  echo ""
-  echo "配置面板访问端口 (用于 HTTP/IP 直连):"
-  read -rp "请输入端口号 [默认: 80]: " PANEL_HTTP_PORT
-  PANEL_HTTP_PORT=${PANEL_HTTP_PORT:-80}
+  if [[ -n "$ARG_PORT" ]]; then
+    PANEL_HTTP_PORT="$ARG_PORT"
+    echo "📌 面板端口: $PANEL_HTTP_PORT"
+  else
+    echo ""
+    echo "配置面板访问端口 (用于 HTTP/IP 直连):"
+    read -rp "请输入端口号 [默认: 80]: " PANEL_HTTP_PORT
+    PANEL_HTTP_PORT=${PANEL_HTTP_PORT:-80}
+  fi
 
   # === 生成 .env ===
   cat > .env <<EOF
@@ -218,7 +273,8 @@ cmd_auto() {
 # ----- 命令分发 -------------------------------------------------
 case "${1:-}" in
   start)
-    cmd_start
+    shift
+    cmd_start "$@"
     ;;
   stop)
     cmd_stop
