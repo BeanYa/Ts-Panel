@@ -1,5 +1,5 @@
 # 多阶段构建：Go 编译 → Alpine 运行
-FROM golang:1.22-alpine AS builder
+FROM golang:1.23-alpine AS builder
 
 ARG GOPROXY
 ENV GOPROXY=${GOPROXY}
