@@ -10,13 +10,12 @@ RUN go mod download
 COPY src/ ./src/
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o ts-panel ./src/
 
-# === 运行镜像 ===
-FROM debian:bookworm-slim
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates docker.io tzdata && \
-    ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
-    echo "Asia/Shanghai" > /etc/timezone && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
+# === 运行镜像 (Alpine + 阿里云源) ===
+FROM alpine:3.19
+RUN sed -i 's|dl-cdn.alpinelinux.org|mirrors.aliyun.com|g' /etc/apk/repositories && \
+    apk add --no-cache ca-certificates docker-cli tzdata && \
+    cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
+    echo "Asia/Shanghai" > /etc/timezone
 
 WORKDIR /app
 COPY --from=builder /build/ts-panel /app/ts-panel
