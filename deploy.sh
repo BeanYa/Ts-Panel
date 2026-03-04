@@ -246,7 +246,7 @@ DAEMON
   # === 启动 ===
   echo ""
   echo "🚀 正在构建并启动服务..."
-  docker compose build --no-cache
+  docker compose build --no-cache --pull
   docker compose up -d
 
   echo ""
