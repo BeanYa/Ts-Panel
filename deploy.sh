@@ -13,24 +13,32 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # ----- 帮助 / 默认提示 ------------------------------------------
 usage() {
   echo ""
-  echo "╔══════════════════════════════════════════════════════════╗"
-  echo "║      ts-panel 管理脚本                                  ║"
-  echo "╠══════════════════════════════════════════════════════════╣"
-  echo "║  用法:                                                  ║"
-  echo "║    ./deploy.sh start [选项]     启动服务                ║"
-  echo "║    ./deploy.sh stop             停止服务                ║"
-  echo "╠══════════════════════════════════════════════════════════╣"
-  echo "║  选项 (均可选，未指定则交互式输入):                      ║"
-  echo "║    --ip       <IP>       服务器公网 IP                  ║"
-  echo "║    --token    <TOKEN>    Admin Token                    ║"
-  echo "║    --port     <PORT>     面板端口 (默认 80)             ║"
-  echo "║    --mode     <1|2>      1=IP直连  2=域名模式           ║"
-  echo "║    --domain   <DOMAIN>   域名 (mode=2 时必填)           ║"
-  echo "║    --goproxy  <URL>      Go 代理地址                    ║"
-  echo "╠══════════════════════════════════════════════════════════╣"
-  echo "║  示例:                                                  ║"
-  echo "║    ./deploy.sh start --ip 1.2.3.4 --token abc --port 80 ║"
-  echo "╚══════════════════════════════════════════════════════════╝"
+  echo "╔══════════════════════════════════════════════════════════════════╗"
+  echo "║      ts-panel 管理脚本                                          ║"
+  echo "╠══════════════════════════════════════════════════════════════════╣"
+  echo "║  用法:                                                          ║"
+  echo "║    ./deploy.sh start [选项]     启动服务                        ║"
+  echo "║    ./deploy.sh stop             停止服务                        ║"
+  echo "╠══════════════════════════════════════════════════════════════════╣"
+  echo "║  选项 (均可选，未指定则交互式输入):                              ║"
+  echo "║    --ip       <IP>       服务器公网 IP                          ║"
+  echo "║    --token    <TOKEN>    Admin Token                            ║"
+  echo "║    --port     <PORT>     面板端口 (默认 80)                     ║"
+  echo "║    --mode     <1|2>      1=IP直连  2=域名模式                   ║"
+  echo "║    --domain   <DOMAIN>   域名 (mode=2 时必填)                   ║"
+  echo "║    --goproxy  <URL>      Go 代理地址                            ║"
+  echo "║    --test     <true|false>  测试模式(使用SQLite) [默认false]    ║"
+  echo "║    --db-type  <mysql|sqlite>  数据库类型 [默认mysql]            ║"
+  echo "║    --db-host  <HOST>     MySQL主机(外部数据库时填写)            ║"
+  echo "║    --db-port  <PORT>     MySQL端口 [默认3306]                   ║"
+  echo "║    --db-user  <USER>     MySQL用户 [默认tspanel]                ║"
+  echo "║    --db-pass  <PASS>     MySQL密码                              ║"
+  echo "║    --db-name  <NAME>     MySQL数据库名 [默认tspanel]            ║"
+  echo "╠══════════════════════════════════════════════════════════════════╣"
+  echo "║  示例:                                                          ║"
+  echo "║    ./deploy.sh start --ip 1.2.3.4 --token abc --port 80         ║"
+  echo "║    ./deploy.sh start --ip 1.2.3.4 --token abc --test true       ║"
+  echo "╚══════════════════════════════════════════════════════════════════╝"
   echo ""
 }
 
@@ -67,6 +75,8 @@ cmd_stop() {
 cmd_start() {
   # --- 解析命令行参数 ---
   local ARG_IP="" ARG_TOKEN="" ARG_MODE="" ARG_DOMAIN="" ARG_GOPROXY="" ARG_PORT=""
+  local ARG_TEST="" ARG_DB_TYPE="" ARG_DB_HOST="" ARG_DB_PORT="" ARG_DB_USER="" ARG_DB_PASS="" ARG_DB_NAME=""
+
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --ip)         ARG_IP="$2";       shift 2 ;;
@@ -75,6 +85,13 @@ cmd_start() {
       --domain)     ARG_DOMAIN="$2";   shift 2 ;;
       --goproxy)    ARG_GOPROXY="$2";  shift 2 ;;
       --port)       ARG_PORT="$2";     shift 2 ;;
+      --test)       ARG_TEST="$2";     shift 2 ;;
+      --db-type)    ARG_DB_TYPE="$2";  shift 2 ;;
+      --db-host)    ARG_DB_HOST="$2";  shift 2 ;;
+      --db-port)    ARG_DB_PORT="$2";  shift 2 ;;
+      --db-user)    ARG_DB_USER="$2";  shift 2 ;;
+      --db-pass)    ARG_DB_PASS="$2";  shift 2 ;;
+      --db-name)    ARG_DB_NAME="$2";  shift 2 ;;
       *) echo "❌ 未知参数: $1"; exit 1 ;;
     esac
   done
@@ -136,6 +153,95 @@ cmd_start() {
     fi
   fi
 
+  # === 数据库配置 ===
+  echo ""
+  echo "═══════════════════════════════════════"
+  echo "      数据库配置"
+  echo "═══════════════════════════════════════"
+
+  # 测试模式
+  TEST_MODE="false"
+  if [[ -n "$ARG_TEST" ]]; then
+    TEST_MODE="$ARG_TEST"
+    echo "📌 测试模式: $TEST_MODE"
+  else
+    echo ""
+    echo "选择运行模式:"
+    echo "  1) 生产模式（使用 MySQL，数据持久化）"
+    echo "  2) 测试模式（使用 SQLite，快速部署）"
+    read -rp "请输入 1 或 2 [默认 1]: " DB_CHOICE
+    DB_CHOICE=${DB_CHOICE:-1}
+    if [[ "$DB_CHOICE" == "2" ]]; then
+      TEST_MODE="true"
+    fi
+  fi
+
+  # 初始化数据库配置变量
+  DB_TYPE="sqlite"
+  DB_HOST=""
+  DB_PORT="3306"
+  DB_USER=""
+  DB_PASSWORD=""
+  DB_NAME=""
+  MYSQL_ROOT_PASSWORD=""
+  USE_EXTERNAL_MYSQL="false"
+
+  # 非测试模式：配置MySQL
+  if [[ "$TEST_MODE" != "true" ]]; then
+    DB_TYPE="mysql"
+
+    if [[ -n "$ARG_DB_TYPE" ]]; then
+      DB_TYPE="$ARG_DB_TYPE"
+    fi
+
+    # 检查是否使用外部MySQL
+    if [[ -n "$ARG_DB_HOST" ]]; then
+      USE_EXTERNAL_MYSQL="true"
+      DB_HOST="$ARG_DB_HOST"
+      DB_PORT="${ARG_DB_PORT:-3306}"
+      DB_USER="${ARG_DB_USER:-tspanel}"
+      DB_PASSWORD="$ARG_DB_PASS"
+      DB_NAME="${ARG_DB_NAME:-tspanel}"
+
+      echo "📌 使用外部 MySQL: $DB_HOST:$DB_PORT"
+
+      if [[ -z "$DB_PASSWORD" ]]; then
+        read -rsp "请输入 MySQL 密码: " DB_PASSWORD
+        echo ""
+      fi
+    else
+      echo ""
+      echo "是否使用外部 MySQL 数据库?"
+      read -rp "输入 y 使用外部数据库，或直接回车启动内置 MySQL [默认内置]: " USE_EXTERNAL_INPUT
+
+      if [[ "$USE_EXTERNAL_INPUT" =~ ^[Yy]$ ]]; then
+        USE_EXTERNAL_MYSQL="true"
+        read -rp "MySQL 主机地址: " DB_HOST
+        read -rp "MySQL 端口 [默认3306]: " DB_PORT_INPUT
+        DB_PORT=${DB_PORT_INPUT:-3306}
+        read -rp "MySQL 用户名 [默认tspanel]: " DB_USER_INPUT
+        DB_USER=${DB_USER_INPUT:-tspanel}
+        read -rsp "MySQL 密码: " DB_PASSWORD
+        echo ""
+        read -rp "MySQL 数据库名 [默认tspanel]: " DB_NAME_INPUT
+        DB_NAME=${DB_NAME_INPUT:-tspanel}
+
+        if [[ -z "$DB_HOST" || -z "$DB_PASSWORD" ]]; then
+          echo "❌ 外部 MySQL 需要填写主机地址和密码"; exit 1
+        fi
+      else
+        # 使用内置 MySQL
+        echo "📌 将自动启动内置 MySQL 容器"
+        DB_HOST="mysql"
+        DB_PORT="3306"
+        DB_USER="tspanel"
+        DB_PASSWORD="tspanel_secret"
+        DB_NAME="tspanel"
+        MYSQL_ROOT_PASSWORD="root_secret"
+      fi
+    fi
+  fi
+
   # === Go 代理配置 ===
   if [[ -n "$ARG_GOPROXY" ]]; then
     GOPROXY="$ARG_GOPROXY"
@@ -177,6 +283,16 @@ SECRETS_RETRY=10
 LOG_TAIL=300
 DATA_ROOT=/data
 DB_PATH=/data/db/app.db
+# 数据库配置
+TEST_MODE=${TEST_MODE}
+DB_TYPE=${DB_TYPE}
+DB_HOST=${DB_HOST}
+DB_PORT=${DB_PORT}
+DB_USER=${DB_USER}
+DB_PASSWORD=${DB_PASSWORD}
+DB_NAME=${DB_NAME}
+# MySQL root密码（仅内置MySQL使用）
+MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
 EOF
   echo "✅ .env 已生成"
 
@@ -246,8 +362,21 @@ DAEMON
   # === 启动 ===
   echo ""
   echo "🚀 正在构建并启动服务..."
-  docker compose build --no-cache --pull
-  docker compose up -d
+
+  # 根据配置决定启动哪些服务
+  if [[ "$TEST_MODE" == "true" ]]; then
+    echo "🧪 测试模式：使用 SQLite，不启动 MySQL"
+    docker compose build --no-cache --pull
+    docker compose up -d
+  elif [[ "$USE_EXTERNAL_MYSQL" == "true" ]]; then
+    echo "🔗 外部 MySQL 模式：连接至 $DB_HOST:$DB_PORT"
+    docker compose build --no-cache --pull
+    docker compose up -d
+  else
+    echo "🐬 内置 MySQL 模式：启动 MySQL 容器"
+    docker compose --profile mysql build --no-cache --pull
+    docker compose --profile mysql up -d
+  fi
 
   echo ""
   echo "╔══════════════════════════════════════╗"
@@ -256,7 +385,14 @@ DAEMON
   if [[ "$MODE" == "2" ]]; then
     echo "║  面板地址: https://${DOMAIN}"
   else
-    echo "║  面板地址: http://${PUBLIC_IP}"
+    echo "║  面板地址: http://${PUBLIC_IP}:${PANEL_HTTP_PORT}"
+  fi
+  if [[ "$TEST_MODE" == "true" ]]; then
+    echo "║  数据库: SQLite（测试模式）"
+  elif [[ "$USE_EXTERNAL_MYSQL" == "true" ]]; then
+    echo "║  数据库: MySQL ($DB_HOST:$DB_PORT)"
+  else
+    echo "║  数据库: MySQL（内置容器）"
   fi
   echo "║  Admin Token: [已安全存储到 .env]"
   echo "║  数据目录: /data"

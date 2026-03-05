@@ -1,4 +1,26 @@
 services:
+  mysql:
+    image: mysql:8.0
+    container_name: ts-panel-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_secret}
+      MYSQL_DATABASE: ${DB_NAME:-tspanel}
+      MYSQL_USER: ${DB_USER:-tspanel}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-tspanel_secret}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - ts-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # 条件启动：只有当 DB_TYPE=mysql 且未配置外部数据库时启动
+    profiles:
+      - mysql
+
   controller:
     build:
       context: .
@@ -8,11 +30,24 @@ services:
     container_name: ts-panel-controller
     restart: unless-stopped
     env_file: .env
+    environment:
+      # 数据库配置
+      - DB_TYPE=${DB_TYPE:-sqlite}
+      - DB_HOST=${DB_HOST:-mysql}
+      - DB_PORT=${DB_PORT:-3306}
+      - DB_USER=${DB_USER:-tspanel}
+      - DB_PASSWORD=${DB_PASSWORD:-}
+      - DB_NAME=${DB_NAME:-tspanel}
+      - TEST_MODE=${TEST_MODE:-false}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${DATA_ROOT:-/data}:/data
     networks:
       - ts-net
+    depends_on:
+      mysql:
+        condition: service_healthy
+        required: false
     healthcheck:
       test: [ "CMD", "wget", "-qO-", "http://localhost:8080/healthz" ]
       interval: 30s
@@ -35,3 +70,6 @@ services:
 networks:
   ts-net:
     name: ts-panel-net
+
+volumes:
+  mysql_data:

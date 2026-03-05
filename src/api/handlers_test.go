@@ -19,9 +19,6 @@ func setupTestServer(t *testing.T) (*httptest.Server, *sql.DB) {
 	if err != nil {
 		t.Fatalf("打开测试 DB 失败: %v", err)
 	}
-	if err := db.RunMigrations(sqlDB); err != nil {
-		t.Fatalf("迁移失败: %v", err)
-	}
 
 	cfg := &config.Config{
 		PublicIP:      "1.2.3.4",
@@ -39,6 +36,11 @@ func setupTestServer(t *testing.T) (*httptest.Server, *sql.DB) {
 		LogTail:       50,
 		DataRoot:      t.TempDir(),
 		DBPath:        ":memory:",
+		DBType:        "sqlite",
+	}
+
+	if err := db.RunMigrations(sqlDB, cfg); err != nil {
+		t.Fatalf("迁移失败: %v", err)
 	}
 
 	router := api.SetupRouter(sqlDB, cfg)

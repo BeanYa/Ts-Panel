@@ -18,14 +18,14 @@ func main() {
 	}
 
 	// 2. 初始化数据库
-	sqlDB, err := db.Open(cfg.DBPath)
+	sqlDB, err := db.Open(cfg)
 	if err != nil {
 		log.Fatalf("数据库初始化失败: %v", err)
 	}
 	defer sqlDB.Close()
 
 	// 3. 执行数据库迁移
-	if err := db.RunMigrations(sqlDB); err != nil {
+	if err := db.RunMigrations(sqlDB, cfg); err != nil {
 		log.Fatalf("数据库迁移失败: %v", err)
 	}
 

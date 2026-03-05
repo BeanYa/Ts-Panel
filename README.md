@@ -1,6 +1,6 @@
 # ts-panel
 
-TeamSpeak 容器管理与发货面板（Go + Gin + Docker + SQLite）。
+TeamSpeak 容器管理与发货面板（Go + Gin + Docker + MySQL/SQLite）。
 
 每个客户 = 一个独立的 TeamSpeak 容器，自动分配端口、抓取密钥、应用 slots 限制，并生成可复制的发货文本。
 
@@ -16,7 +16,20 @@ git clone <repo> ts-panel && cd ts-panel
 chmod +x deploy.sh && ./deploy.sh
 ```
 
-脚本会交互式引导：输入公网 IP、Admin Token、选择 IP 直连或域名 HTTPS 模式。
+脚本会交互式引导：输入公网 IP、Admin Token、选择数据库模式（MySQL/SQLite）、选择 IP 直连或域名 HTTPS 模式。
+
+### 部署模式
+
+| 模式 | 说明 | 适用场景 |
+|------|------|----------|
+| **生产模式（MySQL）** | 自动启动 MySQL 容器，数据持久化 | 正式部署 |
+| **外部 MySQL** | 连接外部 MySQL 数据库 | 已有数据库服务 |
+| **测试模式（SQLite）** | 使用 SQLite，快速部署 | 开发测试 |
+
+**快速测试部署：**
+```bash
+./deploy.sh start --ip 1.2.3.4 --token your-token --test true
+```
 
 ---
 
@@ -91,11 +104,11 @@ docker compose up -d --build
 
 ## 备份
 
-重要数据位于 `/data/`：
+### MySQL 模式（默认）
 
 ```bash
-# 备份数据库
-cp /data/db/app.db /backup/app.db.$(date +%Y%m%d)
+# 备份 MySQL 数据库
+docker exec ts-panel-mysql mysqldump -u root -p${MYSQL_ROOT_PASSWORD} tspanel > /backup/tspanel-$(date +%Y%m%d).sql
 
 # 备份实例数据（TeamSpeak 配置文件）
 tar czf /backup/instances-$(date +%Y%m%d).tar.gz /data/instances/
@@ -104,7 +117,14 @@ tar czf /backup/instances-$(date +%Y%m%d).tar.gz /data/instances/
 建议每日自动备份：
 
 ```cron
-0 3 * * * cp /data/db/app.db /backup/app.db.$(date +\%Y\%m\%d)
+0 3 * * * docker exec ts-panel-mysql mysqldump -u root -proot_secret tspanel > /backup/tspanel-$(date +\%Y\%m\%d).sql
+```
+
+### SQLite 模式（测试模式）
+
+```bash
+# 备份数据库
+cp /data/db/app.db /backup/app.db.$(date +%Y%m%d)
 ```
 
 ---

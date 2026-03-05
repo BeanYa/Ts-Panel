@@ -3,6 +3,7 @@ package db_test
 import (
 	"database/sql"
 	"testing"
+	"ts-panel/src/config"
 	"ts-panel/src/db"
 
 	_ "modernc.org/sqlite"
@@ -18,13 +19,22 @@ func openTestDB(t *testing.T) *sql.DB {
 	return sqlDB
 }
 
+func getTestConfig() *config.Config {
+	return &config.Config{
+		DBType: "sqlite",
+		DBPath: ":memory:",
+	}
+}
+
 func TestRunMigrations_Idempotent(t *testing.T) {
 	sqlDB := openTestDB(t)
 	defer sqlDB.Close()
 
+	cfg := getTestConfig()
+
 	// 必须可以多次执行
 	for i := 0; i < 3; i++ {
-		if err := db.RunMigrations(sqlDB); err != nil {
+		if err := db.RunMigrations(sqlDB, cfg); err != nil {
 			t.Fatalf("第 %d 次迁移失败: %v", i+1, err)
 		}
 	}
@@ -34,7 +44,9 @@ func TestRunMigrations_TablesExist(t *testing.T) {
 	sqlDB := openTestDB(t)
 	defer sqlDB.Close()
 
-	if err := db.RunMigrations(sqlDB); err != nil {
+	cfg := getTestConfig()
+
+	if err := db.RunMigrations(sqlDB, cfg); err != nil {
 		t.Fatalf("迁移失败: %v", err)
 	}
 
@@ -53,7 +65,9 @@ func TestRunMigrations_TablesExist(t *testing.T) {
 func TestInstances_UniquePortConstraint(t *testing.T) {
 	sqlDB := openTestDB(t)
 	defer sqlDB.Close()
-	_ = db.RunMigrations(sqlDB)
+
+	cfg := getTestConfig()
+	_ = db.RunMigrations(sqlDB, cfg)
 
 	now := "2024-01-01T00:00:00Z"
 	_, err := sqlDB.Exec(`
