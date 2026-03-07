@@ -1,5 +1,5 @@
 # 多阶段构建：Go 编译 → Debian 运行
-FROM golang:1.24 AS builder
+FROM golang:latest AS builder
 
 ARG GOPROXY
 ENV GOPROXY=${GOPROXY}
